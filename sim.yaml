@@ -1,13 +1,15 @@
-name: TestSim10
-timestep: 0.1
+name: TestSim14
+timestep: 1
 runtime: 10
-num_runs: 1
+num_runs: 10
 clusters:
-  - num_stars: 150
+  - num_stars: 300
     xoffset: 3
     yoffset: 0
     zoffset: 0
-  - num_stars: 150
+    repopulate_every_run: False
+  - num_stars: 300
     xoffset: -3
     yoffset: 3
     zoffset: 0
+    repopulate_every_run: True

@@ -14,7 +14,8 @@ with open("./sim.yaml") as stream:
 					c_desc["num_stars"],
 					c_desc["xoffset"],
 					c_desc["yoffset"],
-					c_desc["zoffset"] 
+					c_desc["zoffset"],
+					c_desc["repopulate_every_run"]
 				)
 			)
 

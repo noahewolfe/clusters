@@ -9,6 +9,8 @@ from amuse.community.sse.interface import SSE
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+import yaml
+
 OUTPUT_PATH = "/home/noah/clusters_output/"
 if os.path.exists(OUTPUT_PATH) is False:
 	os.mkdir(OUTPUT_PATH)
@@ -83,6 +85,8 @@ def write_csv(file_name, particles, time, mass_u=units.kg, dist_u=units.lightyea
 
 	f.close()
 
+#def write_collision_csv(file_name, )
+
 
 class ClusterSimulation:
 	def __init__(self, name, timestep, runtime, num_runs, clusters):
@@ -98,6 +102,26 @@ class ClusterSimulation:
 		print("		Creating main folder for run output...")
 		self.folder = OUTPUT_PATH + self.name
 		os.mkdir(self.folder)
+		print("		Saving configuration file...")
+		clusters_saved = [] # will contain objects with only the cluster info that we want... not backgronud amuse stuff
+		for c in self.clusters:
+			clusters_saved.append({
+				"num_stars"            : c.num_stars,
+				"xoffset"              : c.xoffset,
+				"yoffset"              : c.yoffset,
+				"zoffset"              : c.zoffset,
+				"repopulate_every_run" : c.repopulate_every_run
+			})
+
+		data = dict(
+			name = self.name,
+			timestep = self.timestep,
+			runtime = self.runtime,
+			num_runs = self.num_runs,
+			clusters = clusters_saved
+		)
+		with open(self.folder + "/config.yaml", "w") as outfile:
+			yaml.dump(data, outfile, default_flow_style=False)
 		print("		Done!")
 
 		print("Done initializing simulation!")
@@ -142,7 +166,9 @@ class ClusterSimulation:
 		# actually run the simulation!
 		print("===== Run #%d =====" % (run_num))
 
-		t = 0
+		t = 0 # time
+		i = 1 # iteration num
+		c = 1 # collision num
 		while(t < self.runtime):
 			print("		Time (Myr): %d" % (t))
 
@@ -156,8 +182,12 @@ class ClusterSimulation:
 			if detect_coll.is_set():
 				print("Detected a collision!!")
 				print(detect_coll.particles(0))
+				coll_f = open(sub_folder + "/collision-" + str(c) + "_time" + str(t) + ".txt")
+				coll_f.write( detect_coll.particles(0) )
+				coll_f.close()
+				c += 1
 				# somehow put a log
-				# also... eventually, "pause" teh rest of the simulation and simulate the collision somehow
+				# also... eventually, "pause" the rest of the simulation and simulate the collision somehow
 
 			#sse_code.particles.copy_values_of_attribute_to("mass", hermite_code.particles)
 			#sse_code.particles.copy_values_of_attribute_to("stellar_type", hermite_code.particles)
@@ -171,17 +201,18 @@ class ClusterSimulation:
 
 			# output to csv
 			print("			Outputting to CSV...")
-			file_name = sub_folder + "/data_time-" + str(t) + ".txt"
+			file_name = sub_folder + "/data-" + str(i) + "_time-" + str(t) + ".txt"
 			write_csv(file_name, stars, t)
 			print("			Done.")
 
 			print("			Creating plot...")
 			plot_name = "System at " + str(t) + " Myr"
-			plot_path = sub_folder + "/plot_time-" + str(t) + ".png"
+			plot_path = sub_folder + "/plot-" + str(i) + "_time-" + str(t) + ".png"
 			plot_data(plot_name, plot_path, hermite_code.particles)
 			print("			Done.")
 
 			t += self.timestep
+			i += 1
 
 		print("Run complete.\n")
 

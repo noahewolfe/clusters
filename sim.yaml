@@ -1,14 +1,14 @@
-name: Enterprise6
+name: NX12
 timestep: 0.01
 runtime: 20
-num_runs: 10
+num_runs: 2
 clusters:
-  - num_stars: 1000
+  - num_stars: 100
     xoffset: 5
     yoffset: 0
     zoffset: 0
     repopulate_every_run: True
-  - num_stars: 1000
+  - num_stars: 100
     xoffset: -5
     yoffset: 5
     zoffset: 0

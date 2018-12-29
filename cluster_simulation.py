@@ -1,5 +1,7 @@
 import os
+import math
 
+import h5py
 from amuse.units import nbody_system
 from amuse.units import units
 from amuse.datamodel import Particles
@@ -9,6 +11,7 @@ from amuse.community.sse.interface import SSE
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+import numpy as np
 import yaml
 
 OUTPUT_PATH = "/home/noah/clusters_output/"
@@ -90,12 +93,17 @@ def write_csv(file_name, particles, time, mass_u=units.kg, dist_u=units.lightyea
 
 class ClusterSimulation:
 	def __init__(self, name, timestep, runtime, num_runs, clusters):
+		
 		print("Initializing cluster simulation %s" % (name) )
+		
 		self.name = name
 		self.num_runs = num_runs
 		self.timestep = timestep
 		self.runtime = runtime
 		self.clusters = clusters
+
+		max_iterations = math.ceil(timestep / runtime) # ceil-ed max number of iterations, to determine 0-padding in hdf5 group names
+		self.iteration_name_length = len( str(max_iterations) )
 
 		# initialize file system stuff
 		# main folder for all runs
@@ -113,6 +121,7 @@ class ClusterSimulation:
 				"repopulate_every_run" : c.repopulate_every_run
 			})
 
+		### Save configuration ###
 		data = dict(
 			name = self.name,
 			timestep = self.timestep,
@@ -124,16 +133,70 @@ class ClusterSimulation:
 			yaml.dump(data, outfile, default_flow_style=False)
 		print("		Done!")
 
+		### Setup HDF5 File Object ###
+		self.hdf5_file = h5py.File(self.folder + "/" + self.name + ".hdf5", "w")
+
 		print("Done initializing simulation!")
+
+	def write_to_hdf5_file(self, run_group, iteration, time, particles, mass_u=units.kg, dist_u=units.lightyear):
+		### Create iteration group ###
+		## Create group name 
+		iter_group_name = str(iteration)
+		add_zeroes = self.iteration_name_length - len(iter_group_name)
+		for z in range(add_zeroes):
+			iter_group_name = "0" + iter_group_name
+
+		## Create group
+		iter_group = run_group.create_group(iter_group_name)
+		iter_group.attrs.create("time", time)
+
+		key_list = []
+
+		x_list = []
+		y_list = []
+		z_list = []
+
+		#vx_list = []
+		#vy_list = []
+		#vz_list = []
+
+		mass_list = []
+		#radius_list = []
+
+		### Add datasets for each particle
+		for p in particles:
+			key_list.append(p.key)
+			x_list.append(p.position.x.value_in(dist_u))
+			y_list.append(p.position.y.value_in(dist_u))
+			z_list.append(p.position.z.value_in(dist_u))
+			#vx_list.append(p.vx)
+			#vy_list.append(p.vy)
+			#vz_list.append(p.vz)
+			mass_list.append(p.mass.value_in(mass_u))
+			#radius_list.append(p.radius)	
+
+		keys = np.array(key_list, dtype="uint64")
+
+		x = np.array(x_list, dtype="float")
+		y = np.array(y_list, dtype="float")
+		z = np.array(z_list, dtype="float")
+
+		#vx = np.array(vx_list)
+		#vy = np.array(vy_list)
+		#vz = np.array(vz_list)
+
+		masses = np.array(mass_list)
+		#radii = np.array(radius_list)
+
+		all_particles = np.vstack( (keys, x, y, z, masses) )
+
+		iter_group.create_dataset("particles", data=all_particles)
 
 	def run(self, run_num):
 		print("Setting up run %d..." % (run_num))
 
-		# create sub-folder for the run
-		print("		Creating folder for results...")
-		sub_folder = self.folder + "/run_" + str(run_num)
-		os.mkdir(sub_folder)
-		print("		Done!")
+		# Create group for run
+		run_group = self.hdf5_file.create_group(str(run_num))
 
 		# create nbody converter thing?
 	 	convert_nbody = nbody_system.nbody_to_si(100.0 | units.MSun, 1 | units.parsec)
@@ -172,6 +235,8 @@ class ClusterSimulation:
 		while(t < self.runtime):
 			print("		Time (Myr): %d" % (t))
 
+			print("			Simulating...")
+
 			# evolve model
 			hermite_code.evolve_model(t | units.Myr)
 			sse_code.evolve_model(t | units.Myr)
@@ -196,20 +261,21 @@ class ClusterSimulation:
 			#sse_code.particles.copy_values_of_attribute_to("temperature", hermite_code.particles)
 			#sse_code.particles.copy_values_of_attribute_to("radius", hermite_code.particles)
 
-
 			hermite_code.particles.mass = sse_code.particles.mass
 
-			# output to csv
-			print("			Outputting to CSV...")
-			file_name = sub_folder + "/data-" + str(i) + "_time-" + str(t) + ".txt"
-			write_csv(file_name, stars, t)
 			print("			Done.")
 
-			print("			Creating plot...")
-			plot_name = "System at " + str(t) + " Myr"
-			plot_path = sub_folder + "/plot-" + str(i) + "_time-" + str(t) + ".png"
-			plot_data(plot_name, plot_path, hermite_code.particles)
+			# output to csv
+			print("			Outputting to HDF5...")
+			#file_name = sub_folder + "/data-" + str(i) + "_time-" + str(t) + ".txt"
+			self.write_to_hdf5_file(run_group, i, t, stars)
 			print("			Done.")
+
+			#print("			Creating plot...")
+			#plot_name = "System at " + str(t) + " Myr"
+			#plot_path = sub_folder + "/plot-" + str(i) + "_time-" + str(t) + ".png"
+			#plot_data(plot_name, plot_path, hermite_code.particles)
+			#print("			Done.")
 
 			t += self.timestep
 			i += 1
@@ -220,3 +286,4 @@ class ClusterSimulation:
 	def do_simulation(self):
 		for r in range(1, self.num_runs + 1):
 			self.run(r)
+		self.hdf5_file.close()
